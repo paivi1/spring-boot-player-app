@@ -1,0 +1,337 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Game Timer</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        h1 {
+            color: white;
+            text-align: center;
+            margin-bottom: 30px;
+            font-size: 2.5em;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+        }
+
+        .add-player-btn {
+            display: block;
+            width: 60px;
+            height: 60px;
+            margin: 0 auto 30px;
+            background: white;
+            border: none;
+            border-radius: 50%;
+            font-size: 32px;
+            color: #667eea;
+            cursor: pointer;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.2);
+            transition: all 0.3s ease;
+        }
+
+        .add-player-btn:hover {
+            transform: scale(1.1);
+            box-shadow: 0 6px 12px rgba(0,0,0,0.3);
+        }
+
+        .add-player-btn:active {
+            transform: scale(0.95);
+        }
+
+        .players-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+            gap: 20px;
+        }
+
+        .player-card {
+            background: white;
+            border-radius: 15px;
+            padding: 25px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            transition: transform 0.2s ease;
+        }
+
+        .player-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 8px 12px rgba(0,0,0,0.15);
+        }
+
+        .player-card.running {
+            border: 3px solid #4CAF50;
+        }
+
+        .player-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+
+        .player-name {
+            font-size: 1.3em;
+            font-weight: bold;
+            color: #333;
+        }
+
+        .delete-btn {
+            background: #ff4757;
+            color: white;
+            border: none;
+            width: 30px;
+            height: 30px;
+            border-radius: 50%;
+            cursor: pointer;
+            font-size: 18px;
+            transition: background 0.3s ease;
+        }
+
+        .delete-btn:hover {
+            background: #ff3838;
+        }
+
+        .timer-display {
+            font-size: 3em;
+            font-weight: bold;
+            text-align: center;
+            margin: 20px 0;
+            color: #667eea;
+            font-family: 'Courier New', monospace;
+        }
+
+        .timer-display.running {
+            color: #4CAF50;
+        }
+
+        .controls {
+            display: flex;
+            gap: 10px;
+        }
+
+        .control-btn {
+            flex: 1;
+            padding: 12px;
+            border: none;
+            border-radius: 8px;
+            font-size: 1em;
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .start-btn {
+            background: #4CAF50;
+            color: white;
+        }
+
+        .start-btn:hover {
+            background: #45a049;
+        }
+
+        .start-btn:disabled {
+            background: #cccccc;
+            cursor: not-allowed;
+        }
+
+        .stop-btn {
+            background: #ff4757;
+            color: white;
+        }
+
+        .stop-btn:hover {
+            background: #ff3838;
+        }
+
+        .stop-btn:disabled {
+            background: #cccccc;
+            cursor: not-allowed;
+        }
+
+        .no-players {
+            text-align: center;
+            color: white;
+            font-size: 1.2em;
+            margin-top: 50px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Game Timer</h1>
+        <button class="add-player-btn" onclick="addPlayer()">+</button>
+        <div id="playersGrid" class="players-grid"></div>
+        <div id="noPlayers" class="no-players" style="display: none;">
+            Click the + button to add players
+        </div>
+    </div>
+
+    <script>
+        let players = [];
+        let updateInterval;
+
+        // Load players on page load
+        window.onload = function() {
+            loadPlayers();
+            startUpdateLoop();
+        };
+
+        async function loadPlayers() {
+            try {
+                const response = await fetch('/api/players');
+                players = await response.json();
+                renderPlayers();
+            } catch (error) {
+                console.error('Error loading players:', error);
+            }
+        }
+
+        async function addPlayer() {
+            try {
+                const playerCount = players.length + 1;
+                const response = await fetch('/api/players', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ name: `Player ${playerCount}` })
+                });
+                const newPlayer = await response.json();
+                players.push(newPlayer);
+                renderPlayers();
+            } catch (error) {
+                console.error('Error adding player:', error);
+            }
+        }
+
+        async function startTimer(playerId) {
+            try {
+                const response = await fetch(`/api/players/${playerId}/start`, {
+                    method: 'POST'
+                });
+                const updatedPlayer = await response.json();
+                updatePlayerInList(updatedPlayer);
+                renderPlayers();
+            } catch (error) {
+                console.error('Error starting timer:', error);
+            }
+        }
+
+        async function stopTimer(playerId) {
+            try {
+                const response = await fetch(`/api/players/${playerId}/stop`, {
+                    method: 'POST'
+                });
+                const updatedPlayer = await response.json();
+                updatePlayerInList(updatedPlayer);
+                renderPlayers();
+            } catch (error) {
+                console.error('Error stopping timer:', error);
+            }
+        }
+
+        async function deletePlayer(playerId) {
+            try {
+                await fetch(`/api/players/${playerId}`, {
+                    method: 'DELETE'
+                });
+                players = players.filter(p => p.id !== playerId);
+                renderPlayers();
+            } catch (error) {
+                console.error('Error deleting player:', error);
+            }
+        }
+
+        function updatePlayerInList(updatedPlayer) {
+            const index = players.findIndex(p => p.id === updatedPlayer.id);
+            if (index !== -1) {
+                players[index] = updatedPlayer;
+            }
+        }
+
+        function formatTime(milliseconds) {
+            const totalSeconds = Math.floor(milliseconds / 1000);
+            const hours = Math.floor(totalSeconds / 3600);
+            const minutes = Math.floor((totalSeconds % 3600) / 60);
+            const seconds = totalSeconds % 60;
+            
+            return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+        }
+
+        function getCurrentTime(player) {
+            if (player.running && player.startTime) {
+                return player.elapsedTime + (Date.now() - player.startTime);
+            }
+            return player.elapsedTime;
+        }
+
+        function renderPlayers() {
+            const grid = document.getElementById('playersGrid');
+            const noPlayers = document.getElementById('noPlayers');
+            
+            if (players.length === 0) {
+                grid.innerHTML = '';
+                noPlayers.style.display = 'block';
+                return;
+            }
+            
+            noPlayers.style.display = 'none';
+            
+            grid.innerHTML = players.map(player => `
+                <div class="player-card ${player.running ? 'running' : ''}" data-player-id="${player.id}">
+                    <div class="player-header">
+                        <div class="player-name">${player.name}</div>
+                        <button class="delete-btn" onclick="deletePlayer(${player.id})">×</button>
+                    </div>
+                    <div class="timer-display ${player.running ? 'running' : ''}" id="timer-${player.id}">
+                        ${formatTime(getCurrentTime(player))}
+                    </div>
+                    <div class="controls">
+                        <button class="control-btn start-btn" 
+                                onclick="startTimer(${player.id})" 
+                                ${player.running ? 'disabled' : ''}>
+                            Start
+                        </button>
+                        <button class="control-btn stop-btn" 
+                                onclick="stopTimer(${player.id})" 
+                                ${!player.running ? 'disabled' : ''}>
+                            Stop
+                        </button>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        function updateTimerDisplays() {
+            players.forEach(player => {
+                if (player.running) {
+                    const timerElement = document.getElementById(`timer-${player.id}`);
+                    if (timerElement) {
+                        timerElement.textContent = formatTime(getCurrentTime(player));
+                    }
+                }
+            });
+        }
+
+        function startUpdateLoop() {
+            updateInterval = setInterval(updateTimerDisplays, 100);
+        }
+    </script>
+</body>
+</html>
